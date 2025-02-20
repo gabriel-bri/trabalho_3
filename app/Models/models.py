@@ -18,7 +18,7 @@ class Curso(BaseModel):
 
 
 class Aluno(BaseModel):
-    id: Optional[str] = Field(default=None, alias="_id")
+    id: Optional[str] = Field(default=None,  alias="_id")
     nome_completo: str
     descricao: Optional[str] = None
     contato_email: str
