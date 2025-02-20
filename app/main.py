@@ -1,12 +1,11 @@
-
 from fastapi import FastAPI
-from Routes import alunos
+from Routes import alunos, cursos, aulas
 
 app = FastAPI()
 
 app.include_router(alunos.router, tags=["Alunos"])
-# app.include_router(cursos.router, tags=["Cursos"])
-# app.include_router(aulas.router, tags=["Aulas"])
+app.include_router(cursos.router, tags=["Cursos"])
+app.include_router(aulas.router, tags=["Aulas"])
 # app.include_router(avaliacao.router, tags=["Avaliação"])
 # app.include_router(categoria.router, tags=["Categoria"])
 # app.include_router(certificado.router, tags=["Certificado"])
