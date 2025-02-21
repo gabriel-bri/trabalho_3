@@ -35,8 +35,11 @@ async def buscar_cursos_por_id(curso_id: str) -> Dict[str, Any]:
 
     curso["_id"] = str(curso["_id"])
 
-    if "modulos" in curso and isinstance(curso["modulos"], list):
-        curso["modulos"] = [str(modulo_id) if isinstance(modulo_id, ObjectId) else modulo_id for modulo_id in curso["modulos"]]
+    curso["modulos"] = [str(m) for m in curso.get("modulos", [])]
+    curso["alunos"] = [str(a) for a in curso.get("alunos", [])]
+    curso["categoria_id"] = str(curso["categoria_id"]) if curso.get("categoria_id") else None
+    if "instrutor" in curso and curso["instrutor"]:
+        curso["instrutor"] = dict(curso["instrutor"])
 
     return curso
 
@@ -45,11 +48,13 @@ async def listar_curso():
     cursos = await db.cursos.find().to_list(None)
     
     for curso in cursos:
-        curso["_id"] = str(curso["_id"])
-        
-        # Converte os IDs dos cursos para string, se existirem
-        if "categoria" in curso and isinstance(curso["categoria"], list):
-            curso["categoria"] = [str(id) if isinstance(id, ObjectId) else id for id in curso["categoria"]]
+        curso["_id"] = str(curso["_id"]) 
+        curso["categoria_id"] = str(curso.get("categoria_id", "")) if curso.get("categoria_id") else None
+        curso["modulos"] = list(map(str, curso.get("modulos", [])))
+        curso["alunos"] = list(map(str, curso.get("alunos", [])))
+        if "instrutor" in curso and curso["instrutor"]:
+            curso["instrutor"] = dict(curso["instrutor"]) 
+
 
     return cursos
 
@@ -60,7 +65,7 @@ async def atualizar_curso(curso_id: str, curso: Curso):
     if not ObjectId.is_valid(curso_id):
         raise HTTPException(status_code=400, detail="Id inválido")
     
-    curso_dict = curso.model_dump(by_alias=True, exclude={"id"})
+    curso_dict = curso.dict(by_alias=True, exclude={"id"})
      
     resultado = await db.cursos.update_one({"_id": ObjectId(curso_id)}, {"$set" : curso_dict})
     
