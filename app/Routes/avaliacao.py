@@ -22,6 +22,41 @@ async def criar_avaliacao(avaliacao: Avaliacao):
 
     return avaliacao_criada
 
+@router.get("/avaliacao/quantidade")
+async def quantidade_avaliacoes():
+    total_avaliacoes = await db.avaliacoes.count_documents({})
+    return {"quantidade avaliações": total_avaliacoes}
+
+@router.get("/avaliacao/paginados", response_model=Dict[str, Any])
+async def paginacao_avaliacao(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1),
+):
+    try:
+        total = await db.avaliacoes.count_documents({})
+
+        avaliacoes_cursor = db.avaliacoes.find().skip(offset).limit(limit)
+        avaliacoes = await avaliacoes_cursor.to_list(length=limit)
+        
+        for avaliacao in avaliacoes:
+            avaliacao["_id"] = str(avaliacao["_id"])
+        
+        current_page = (offset // limit) + 1
+        total_pages = (total // limit) + (1 if total % limit > 0 else 0)
+
+        return {
+            "data": avaliacoes,
+            "pagination": {
+                "total": total,
+                "current_page": current_page,
+                "total_pages": total_pages,
+                "page_size": limit,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
+
+
 @router.get("/avaliacao/{avaliacao_id}", response_model=Avaliacao)
 async def buscar_avaliacao_por_id(avaliacao_id: str) -> Dict[str, Any]:
     filtro = {"_id": ObjectId(avaliacao_id)} if ObjectId.is_valid(avaliacao_id) else {"_id": avaliacao_id}
@@ -61,7 +96,7 @@ async def atualizar_avaliacao(avaliacao_id: str, avaliacao: Avaliacao):
     if not ObjectId.is_valid(avaliacao_id):
         raise HTTPException(status_code=400, detail="Id inválido")
     
-    avaliacao_dict = avaliacao.model_dump(by_alias=True, exclude={"id"})
+    avaliacao_dict = avaliacao.dict(by_alias=True, exclude={"id"})
      
     resultado = await db.avaliacoes.update_one({"_id": ObjectId(avaliacao_id)}, {"$set" : avaliacao_dict})
     
@@ -91,36 +126,5 @@ async def excluir_avaliacao(avaliacao_id: str):
     
     return {"messagem": "Avaliação excluida com sucesso"}
 
-@router.get("/avaliacao/quantidade")
-async def quantidade_avaliacoes():
-    total_avaliacoes = await db.avaliacoes.count_documents({})
-    return {"quantidade avaliações": total_avaliacoes}
 
-@router.get("/avaliacao/paginados", response_model=Dict[str, Any])
-async def paginacao_avaliacao(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1),
-):
-    try:
-        total = await db.avaliacoes.count_documents({})
 
-        avaliacoes_cursor = db.avaliacoes.find().skip(offset).limit(limit)
-        avaliacoes = await avaliacoes_cursor.to_list(length=limit)
-        
-        for avaliacao in avaliacoes:
-            avaliacao["_id"] = str(avaliacao["_id"])
-        
-        current_page = (offset // limit) + 1
-        total_pages = (total // limit) + (1 if total % limit > 0 else 0)
-
-        return {
-            "data": avaliacoes,
-            "pagination": {
-                "total": total,
-                "current_page": current_page,
-                "total_pages": total_pages,
-                "page_size": limit,
-            },
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
