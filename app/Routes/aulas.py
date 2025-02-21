@@ -22,19 +22,84 @@ async def criar_aula(aula: Aula):
 
     return aula_criada
 
+@router.get("/aulas/quantidade")
+async def quantidade_aulas():
+    total_aulas = await db.aulas.count_documents({})
+    return {"quantidade aulas": total_aulas}
+
+@router.get("/aulas/filtrar")
+async def filtrar_aulas (
+    titulo: Optional[str] = Query(None, min_length=3),
+    descricao: Optional[str] = Query(None, min_length=3)
+) -> List[Dict]:
+    try:
+        filtros: Dict = {}
+                   
+        
+        if titulo:
+            filtros["titulo"] = {"$regex": titulo, "$options" : "i"}
+            
+        
+        if descricao:
+            filtros["descricao"] = {"$regex": descricao, "$options" : "i"}
+        
+        cursor = db.aulas.find(filtros, {"_id": 0})  # Retorna um cursor assíncrono
+        aulas: List[Dict] = await cursor.to_list(length=None) 
+        
+        return aulas
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Erro inesperado ao filtrar aulas")
+    
+    
+
+@router.get("/aulas/paginados", response_model=Dict[str, Any])
+async def paginacao_aulas(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1),
+):
+    try:
+        total = await db.aulas.count_documents({})
+
+        aulas_cursor = db.aulas.find().skip(offset).limit(limit)
+        aulas = await aulas_cursor.to_list(length=limit)
+        
+        for aula in aulas:
+            aula["_id"] = str(aula["_id"])
+        
+        current_page = (offset // limit) + 1
+        total_pages = (total // limit) + (1 if total % limit > 0 else 0)
+
+        return {
+            "data": aulas,
+            "pagination": {
+                "total": total,
+                "current_page": current_page,
+                "total_pages": total_pages,
+                "page_size": limit,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
+
 @router.get("/aulas/{aula_id}", response_model=Aula)
 async def buscar_aulas_por_id(aula_id: str) -> Dict[str, Any]:
     filtro = {"_id": ObjectId(aula_id)} if ObjectId.is_valid(aula_id) else {"_id": aula_id}
 
     aula = await db.aulas.find_one(filtro)
+    
+    
 
     if not aula:
         raise HTTPException(status_code=404, detail="Aula não encontrada")
 
     aula["_id"] = str(aula["_id"])
+    
 
     if "modulos" in aula and isinstance(aula["modulos"], list):
         aula["modulos"] = [str(modulo_id) if isinstance(modulo_id, ObjectId) else modulo_id for modulo_id in aula["modulos"]]
+        
+    if "modulo_id" in aula and isinstance(aula["modulo_id"], ObjectId):
+        aula["modulo_id"] = str(aula["modulo_id"])
 
     return aula
 
@@ -56,7 +121,7 @@ async def atualizar_aula(aula_id: str, aula: Aula):
     if not ObjectId.is_valid(aula_id):
         raise HTTPException(status_code=400, detail="Id inválido")
     
-    aula_dict = aula.model_dump(by_alias=True, exclude={"id"})
+    aula_dict = aula.dict(by_alias=True, exclude={"id"})
      
     resultado = await db.aulas.update_one({"_id": ObjectId(aula_id)}, {"$set" : aula_dict})
     
@@ -91,60 +156,8 @@ async def excluir_aula(aula_id: str):
     
     return {"messagem": "Aula excluida e removido do curso com sucesso"}
 
-@router.get("/aulas/quantidade")
-async def quantidade_aulas():
-    total_aulas = await db.aulas.count_documents({})
-    return {"quantidade aulas": total_aulas}
 
-@router.get("/aulas/paginados", response_model=Dict[str, Any])
-async def paginacao_aulas(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1),
-):
-    try:
-        total = await db.aulas.count_documents({})
 
-        aulas_cursor = db.aulas.find().skip(offset).limit(limit)
-        aulas = await aulas_cursor.to_list(length=limit)
-        
-        for aula in aulas:
-            aula["_id"] = str(aula["_id"])
-        
-        current_page = (offset // limit) + 1
-        total_pages = (total // limit) + (1 if total % limit > 0 else 0)
 
-        return {
-            "data": aulas,
-            "pagination": {
-                "total": total,
-                "current_page": current_page,
-                "total_pages": total_pages,
-                "page_size": limit,
-            },
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
     
     
-@router.get("/aulas/filtrar")
-async def filtrar_aulas (
-    titulo: Optional[str] = Query(None, min_length=3),
-    descricao: Optional[str] = Query(None, min_length=3)
-) -> List[Dict]:
-    try:
-        filtros: Dict = {}
-                   
-        
-        if titulo:
-            filtros["titulo"] = {"$regex": titulo, "$options" : "i"}
-            
-        
-        if descricao:
-            filtros["descricao"] = {"$regex": descricao, "$options" : "i"}
-        
-        cursor = db.aulas.find(filtros, {"_id": 0})  # Retorna um cursor assíncrono
-        aulas: List[Dict] = await cursor.to_list(length=None) 
-        
-        return aulas
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Erro inesperado ao filtrar aulas")
