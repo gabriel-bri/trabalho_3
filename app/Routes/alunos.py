@@ -24,26 +24,28 @@ async def criar_aluno(aluno: Aluno):
     return aluno_criado
 
 @router.get("/alunos/filtrar")
-async def filtrar_alunos(
+async def filtrar_alunos (
     nome_completo: Optional[str] = Query(None, min_length=3),
-    contato_email: Optional[str] = None,
+    contato_email: Optional[str] = Query(None, min_length=3)
 ) -> List[Dict]:
     try:
         filtros: Dict = {}
+                   
         
         if nome_completo:
-            filtros["nome_completo"] = {"$regex": nome_completo, "$options": "i"}
-           
+            filtros["nome_completo"] = {"$regex": nome_completo, "$options" : "i"}
+            
         
         if contato_email:
             filtros["contato_email"] = {"$regex": contato_email, "$options" : "i"}
         
-        cursor = db.alunos.find(filtros, {"_id": 0})  # Retorna um cursor assíncrono
-        alunos: List[Dict] = await cursor.to_list(length=None)
+        cursor = db.alunos.find(filtros, {"_id": 0, "cursos": 0, "certificados": 0})
+        alunos: List[Dict] = await cursor.to_list(length=None) 
         
         return alunos
     except Exception as e:
         raise HTTPException(status_code=500, detail="Erro inesperado ao filtrar alunos")
+    
 
 @router.get("/alunos", response_model=List[Aluno])
 async def listar_aluno():
