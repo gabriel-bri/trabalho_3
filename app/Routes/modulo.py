@@ -21,6 +21,40 @@ async def criar_modulo(modulo: Modulo):
 
     return modulo_criado
 
+@router.get("/modulos/quantidade")
+async def quantidade_modulos():
+    total_modulos = await db.modulos.count_documents({})
+    return {"quantidade modulos": total_modulos}
+
+@router.get("/modulos/paginados", response_model=Dict[str, Any])
+async def paginacao_modulos(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1),
+):
+    try:
+        total = await db.modulos.count_documents({})
+
+        modulos_cursor = db.modulos.find().skip(offset).limit(limit)
+        modulos = await modulos_cursor.to_list(length=limit)
+        
+        for modulo in modulos:
+            modulo["_id"] = str(modulo["_id"])
+        
+        current_page = (offset // limit) + 1
+        total_pages = (total // limit) + (1 if total % limit > 0 else 0)
+
+        return {
+            "data": modulos,
+            "pagination": {
+                "total": total,
+                "current_page": current_page,
+                "total_pages": total_pages,
+                "page_size": limit,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
+
 @router.get("/modulos/{modulo_id}", response_model=Modulo)
 async def buscar_modulos_por_id(modulo_id: str) -> Dict[str, Any]:
     filtro = {"_id": ObjectId(modulo_id)} if ObjectId.is_valid(modulo_id) else {"_id": modulo_id}
@@ -55,7 +89,7 @@ async def atualizar_modulo(modulo_id: str, modulo: Modulo):
     if not ObjectId.is_valid(modulo_id):
         raise HTTPException(status_code=400, detail="Id inválido")
     
-    modulo_dict = modulo.model_dump(by_alias=True, exclude={"id"})
+    modulo_dict = modulo.dict(by_alias=True, exclude={"id"})
      
     resultado = await db.modulos.update_one({"_id": ObjectId(modulo_id)}, {"$set" : modulo_dict})
     
@@ -77,51 +111,11 @@ async def excluir_modulo(modulo_id: str):
     modulo = await db.modulos.find_one({"_id": modulo_obj_id})
     if not modulo:
         raise HTTPException(status_code=404, detail="Modulo não encontrado")
-    
-    curso_id = modulo["curso_id"]
-    
+        
     
     delete_resultado = await db.modulos.delete_one({"_id": modulo_obj_id})
     if delete_resultado.deleted_count == 0:
         raise HTTPException(status_code=500, detail="Erro ao excluir Modulo")
     
-    await db.cursos.update.many(
-        {"_id": ObjectId(curso_id)},
-        {"$pull": {"modulos": modulo_obj_id}}
-    )
-    
     return {"messagem": "Modulo excluido e removido do curso com sucesso"}
 
-@router.get("/modulos/quantidade")
-async def quantidade_modulos():
-    total_modulos = await db.modulos.count_documents({})
-    return {"quantidade modulos": total_modulos}
-
-@router.get("/modulos/paginados", response_model=Dict[str, Any])
-async def paginacao_modulos(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1),
-):
-    try:
-        total = await db.modulos.count_documents({})
-
-        modulos_cursor = db.modulos.find().skip(offset).limit(limit)
-        modulos = await modulos_cursor.to_list(length=limit)
-        
-        for modulo in modulos:
-            modulo["_id"] = str(modulo["_id"])
-        
-        current_page = (offset // limit) + 1
-        total_pages = (total // limit) + (1 if total % limit > 0 else 0)
-
-        return {
-            "data": modulos,
-            "pagination": {
-                "total": total,
-                "current_page": current_page,
-                "total_pages": total_pages,
-                "page_size": limit,
-            },
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
