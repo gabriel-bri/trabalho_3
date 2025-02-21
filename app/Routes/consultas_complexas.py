@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from bson import ObjectId
 from Database.database import db
-from Models.models import Aluno, Curso
+from Models.models import Aluno, Curso, Modulo
 from typing import Dict, Any
 
 router = APIRouter()
@@ -104,3 +104,48 @@ async def alunos_por_curso(curso_id: str) -> Dict[str, Any]:
                 aluno["cursos"] = [str(curso) if isinstance(curso, ObjectId) else curso for curso in aluno["cursos"]]
 
     return curso_detalhado
+
+
+@router.get("/modulos/detalhes")
+async def modulos_com_cursos_e_total_aulas():
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "cursos", 
+                "localField": "_id",
+                "foreignField": "modulos",  
+                "as": "cursos_info"
+            }
+        },
+        {
+            "$lookup": {
+                "from": "aulas",  
+                "localField": "_id",
+                "foreignField": "modulo_id",  
+                "as": "aulas_info"
+            }
+        },
+        {
+            "$addFields": {
+                "total_aulas": {"$size": "$aulas_info"}  
+            }
+        },
+        {
+            "$project": {
+                "_id": 1,
+                "nome_modulo": 1,
+                "descricao": 1,
+                "curso": "$cursos_info.nome_curso",  
+                "total_aulas": 1 
+            }
+        }
+    ]
+    
+    resultado = await db.modulos.aggregate(pipeline).to_list(100)
+    
+    for modulo in resultado:
+        modulo["_id"] = str(modulo["_id"])
+        if "cursos_info" in modulo and isinstance(modulo["cursos_info"], list):
+            modulo["cursos_info"] = [str(curso_id) for curso_id in modulo["cursos_info"]]
+    
+    return resultado
