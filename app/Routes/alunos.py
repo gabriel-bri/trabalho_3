@@ -23,6 +23,28 @@ async def criar_aluno(aluno: Aluno):
 
     return aluno_criado
 
+@router.get("/alunos/filtrar")
+async def filtrar_alunos(
+    nome_completo: Optional[str] = Query(None, min_length=3),
+    contato_email: Optional[str] = None,
+) -> List[Dict]:
+    try:
+        filtros: Dict = {}
+        
+        if nome_completo:
+            filtros["nome_completo"] = {"$regex": nome_completo, "$options": "i"}
+           
+        
+        if contato_email:
+            filtros["contato_email"] = {"$regex": contato_email, "$options" : "i"}
+        
+        cursor = db.alunos.find(filtros, {"_id": 0})  # Retorna um cursor assíncrono
+        alunos: List[Dict] = await cursor.to_list(length=None)
+        
+        return alunos
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Erro inesperado ao filtrar alunos")
+
 @router.get("/alunos", response_model=List[Aluno])
 async def listar_aluno():
     alunos = await db.alunos.find().to_list(None)
@@ -36,69 +58,11 @@ async def listar_aluno():
 
     return alunos
 
-@router.get("/alunos/{aluno_id}", response_model=Aluno)
-async def buscar_aluno_por_id(aluno_id: str) -> Dict[str, Any]:
-    filtro = {"_id": ObjectId(aluno_id)} if ObjectId.is_valid(aluno_id) else {"_id": aluno_id}
 
-    aluno = await db.alunos.find_one(filtro)
-
-    if not aluno:
-        raise HTTPException(status_code=404, detail="Aluno não encontrado")
-
-    aluno["_id"] = str(aluno["_id"])
-
-    if "cursos" in aluno and isinstance(aluno["cursos"], list):
-        aluno["cursos"] = [str(curso_id) if isinstance(curso_id, ObjectId) else curso_id for curso_id in aluno["cursos"]]
-
-    return aluno
-
-@router.put("/alunos/{aluno_id}", response_model=Aluno)
-async def atualizar_aluno(aluno_id: str, aluno: Aluno):
-    if not ObjectId.is_valid(aluno_id):
-        raise HTTPException(status_code=400, detail="Id inválido")
-    
-    aluno_dict = aluno.model_dump(by_alias=True, exclude={"id"})
-     
-    resultado = await db.alunos.update_one({"_id": ObjectId(aluno_id)}, {"$set" : aluno_dict})
-    
-    if resultado.matched_count == 0:
-        raise HTTPException (status_code=404, detail="Aluno não encontrado")
-    
-    aluno_atualizado = await db.alunos.find_one({"_id": ObjectId(aluno_id)})
-    aluno_atualizado["_id"] = str(aluno_atualizado["_id"])
-    
-    return aluno_atualizado
-
-@router.delete("/alunos/{aluno_id}", status_code=200)
-async def excluir_aluno(aluno_id: str):
-    if not ObjectId.is_valid(aluno_id):
-        raise HTTPException(status_code=400, detail="ID de aluno inválido")
-    
-    aluno_obj_id = ObjectId(aluno_id)
-    
-    aluno = await db.alunos.find_one({"_id": aluno_obj_id})
-    if not aluno:
-        raise HTTPException(status_code=404, detail="Aluno não encontrado")
-    
-    
-    delete_resultado = await db.alunos.delete_one({"_id": aluno_obj_id})
-    if delete_resultado.deleted_count ==0:
-        raise HTTPException(status_code=500, detail="Erro ao excluir aluno")
-    
-    await db.cursos.update.many(
-        {"alunos": aluno_obj_id},
-        {"$pull": {"alunos": aluno_obj_id}}
-    )
-    
-    return {"messagem": "Aluno excluido e removido do curso com sucesso"}
-
-
-
-@router.get("/alunos/quantidade")
+@router.get("/alunos/quantidade-total")
 async def quantidade_alunos():
     total_alunos = await db.alunos.count_documents({})
     return {"quantidade alunos": total_alunos}
-
 
 @router.get("/alunos/paginados", response_model=Dict[str, Any])
 async def paginacao_alunos(
@@ -130,25 +94,70 @@ async def paginacao_alunos(
     except Exception as e:
         raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
     
-    
-@router.get("/alunos/filtrar")
-async def filtrar_alunos(
-    nome_completo: Optional[str] = Query(None, min_length=3),
-    contato_email: Optional[str] = None,
-) -> List[Dict]:
+
+
+@router.get("/alunos/{aluno_id}", response_model=Aluno)
+async def buscar_aluno_por_id(aluno_id: str) -> Dict[str, Any]:
     try:
-        filtros: Dict = {}
-        
-        if nome_completo:
-            filtros["nome_completo"] = {"$regex": nome_completo, "$options": "i"}
-           
-        
-        if contato_email:
-            filtros["contato_email"] = {"$regex": contato_email, "$options" : "i"}
-        
-        cursor = db.alunos.find(filtros, {"_id": 0})  # Retorna um cursor assíncrono
-        alunos: List[Dict] = await cursor.to_list(length=None)
-        
-        return alunos
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Erro inesperado ao filtrar alunos")
+        filtro = {"_id": ObjectId(aluno_id)}
+    except Exception:
+        filtro = {"_id": aluno_id}
+
+    aluno = await db.alunos.find_one(filtro)
+    
+    if not aluno:
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+    
+    aluno["_id"] = str(aluno["_id"])
+    
+    if "cursos" in aluno and isinstance(aluno["cursos"], list):
+        aluno["cursos"] = [str(curso_id) if isinstance(curso_id, ObjectId) else curso_id for curso_id in aluno["cursos"]]
+    
+    if "certificados" in aluno and isinstance(aluno["certificados"], list):
+        aluno["certificados"] = [str(certificado_id) if isinstance(certificado_id, ObjectId) else certificado_id for certificado_id in aluno["certificados"]]
+
+    
+    return aluno
+
+@router.put("/alunos/{aluno_id}", response_model=Aluno)
+async def atualizar_aluno(aluno_id: str, aluno: Aluno):
+    if not ObjectId.is_valid(aluno_id):
+        raise HTTPException(status_code=400, detail="Id inválido")
+    
+    aluno_dict = aluno.dict(by_alias=True, exclude={"id"})
+    
+    
+     
+    resultado = await db.alunos.update_one({"_id": ObjectId(aluno_id)}, {"$set" : aluno_dict})
+    
+    if resultado.matched_count == 0:
+        raise HTTPException (status_code=404, detail="Aluno não encontrado")
+    
+    aluno_atualizado = await db.alunos.find_one({"_id": ObjectId(aluno_id)})
+    aluno_atualizado["_id"] = str(aluno_atualizado["_id"])
+    
+    
+    
+    return aluno_atualizado
+
+@router.delete("/alunos/{aluno_id}", status_code=200)
+async def excluir_aluno(aluno_id: str):
+    if not ObjectId.is_valid(aluno_id):
+        raise HTTPException(status_code=400, detail="ID de aluno inválido")
+    
+    aluno_obj_id = ObjectId(aluno_id)
+    
+    aluno = await db.alunos.find_one({"_id": aluno_obj_id})
+    if not aluno:
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+    
+    
+    delete_resultado = await db.alunos.delete_one({"_id": aluno_obj_id})
+    if delete_resultado.deleted_count ==0:
+        raise HTTPException(status_code=500, detail="Erro ao excluir aluno")
+    
+    return {"messagem": "Aluno excluido e removido do curso com sucesso"}
+
+
+
+    
