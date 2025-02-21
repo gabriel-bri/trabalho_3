@@ -21,6 +21,40 @@ async def criar_instrutor(instrutor: Instrutor):
 
     return instrutor_criado
 
+@router.get("/instrutores/quantidade")
+async def quantidade_instrutores():
+    total_instrutores = await db.instrutores.count_documents({})
+    return {"quantidade instrutores": total_instrutores}
+
+@router.get("/instrutores/paginados", response_model=Dict[str, Any])
+async def paginacao_instrutores(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1),
+):
+    try:
+        total = await db.instrutores.count_documents({})
+
+        instrutores_cursor = db.instrutores.find().skip(offset).limit(limit)
+        instrutores = await instrutores_cursor.to_list(length=limit)
+        
+        for instrutor in instrutores:
+            instrutor["_id"] = str(instrutor["_id"])
+        
+        current_page = (offset // limit) + 1
+        total_pages = (total // limit) + (1 if total % limit > 0 else 0)
+
+        return {
+            "data": instrutores,
+            "pagination": {
+                "total": total,
+                "current_page": current_page,
+                "total_pages": total_pages,
+                "page_size": limit,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
+
 @router.get("/instrutores/{instrutor_id}", response_model=Instrutor)
 async def buscar_instrutores_por_id(instrutor_id: str) -> Dict[str, Any]:
     filtro = {"_id": ObjectId(instrutor_id)} if ObjectId.is_valid(instrutor_id) else {"_id": instrutor_id}
@@ -55,7 +89,7 @@ async def atualizar_instrutor(instrutor_id: str, instrutor: Instrutor):
     if not ObjectId.is_valid(instrutor_id):
         raise HTTPException(status_code=400, detail="Id inválido")
     
-    instrutor_dict = instrutor.model_dump(by_alias=True, exclude={"id"})
+    instrutor_dict = instrutor.dict(by_alias=True, exclude={"id"})
      
     resultado = await db.instrutores.update_one({"_id": ObjectId(instrutor_id)}, {"$set" : instrutor_dict})
     
@@ -77,51 +111,11 @@ async def excluir_instrutor(instrutor_id: str):
     instrutor = await db.instrutores.find_one({"_id": instrutor_obj_id})
     if not instrutor:
         raise HTTPException(status_code=404, detail="Instrutor não encontrado")
-    
-    curso_id = instrutor["curso_id"]
-    
+        
     
     delete_resultado = await db.instrutores.delete_one({"_id": instrutor_obj_id})
     if delete_resultado.deleted_count == 0:
         raise HTTPException(status_code=500, detail="Erro ao excluir Instrutor")
     
-    await db.cursos.update.many(
-        {"_id": ObjectId(curso_id)},
-        {"$pull": {"instrutores": instrutor_obj_id}}
-    )
     
     return {"messagem": "Instrutor excluido e removido do curso com sucesso"}
-
-@router.get("/instrutores/quantidade")
-async def quantidade_instrutores():
-    total_instrutores = await db.instrutores.count_documents({})
-    return {"quantidade instrutores": total_instrutores}
-
-@router.get("/instrutores/paginados", response_model=Dict[str, Any])
-async def paginacao_instrutores(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1),
-):
-    try:
-        total = await db.instrutores.count_documents({})
-
-        instrutores_cursor = db.instrutores.find().skip(offset).limit(limit)
-        instrutores = await instrutores_cursor.to_list(length=limit)
-        
-        for instrutor in instrutores:
-            instrutor["_id"] = str(instrutor["_id"])
-        
-        current_page = (offset // limit) + 1
-        total_pages = (total // limit) + (1 if total % limit > 0 else 0)
-
-        return {
-            "data": instrutores,
-            "pagination": {
-                "total": total,
-                "current_page": current_page,
-                "total_pages": total_pages,
-                "page_size": limit,
-            },
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Erro ao realizar paginação.")
